@@ -11,6 +11,11 @@
 #include <stdlib.h>
 #include "db.h"
 
+/* Edit - Thales: 
+    Aloquei espaço na memória e iniciei um rwlock para cada partição.
+    Declarei previamente no Header, defini aqui.
+*/
+
 void db_init(db_t *self, wal_t *wal)
 {
     /* Cria as contas (NÃO ALTERE!). */
@@ -24,36 +29,99 @@ void db_init(db_t *self, wal_t *wal)
 
     /* TODO: Adicionar código aqui se necessário! */
 
+    self->rwlocks = malloc(config.partitions * sizeof(pthread_rwlock_t));
+    
+    for (unsigned int i = 0; i < config.partitions; i++) {
+        pthread_rwlock_init(&self->rwlocks[i], NULL);
+    }
+
     plog("[db] Initialized\n");
 }
+
+/* Edit - Thales: 
+    Destrui todos os rwlock - um para cada partição
+*/
 
 void db_finalize(db_t *self)
 {
     /* TODO: Adicionar código aqui se necessário! */
 
+    for (int i = 0; i < config.partitions; i++) {
+        pthread_rwlock_destroy(&self->rwlocks[i]);
+    }
+    free(self->rwlocks);
+
     table_finalize(&self->table);
     plog("[db] Finalized\n");
 }
 
+/*
+================================================================
+                        Parte 1 - Thales                 
+================================================================
+*/
+
+
+// Serve para travar a partição do Banco de Dados que vai ser acessada
 void db_acquire_read(db_t *self, const char *key)
 {
-    /* TODO: Implementar! */
+    unsigned int partition = db_partition_of(self,key);
+    pthread_rwlock_rdlock(&self->rwlocks[partition]);
 }
 
+// Serve para liberar a partição do Banco de Dados que vai ser acessada
 void db_release_read(db_t *self, const char *key)
 {
-    /* TODO: Implementar! */
+    unsigned int partition = db_partition_of(self,key);
+    pthread_rwlock_unlock(&self->rwlocks[partition]);
 }
 
 void db_acquire_pair(db_t *self, const char *from, const char *to)
 {
-    /* TODO: Implementar! */
+    unsigned int p_from = db_partition_of(self, from);
+    unsigned int p_to   = db_partition_of(self, to);
+
+    unsigned int p1 = (p_from < p_to) ? p_from : p_to;
+    unsigned int p2 = (p_from < p_to) ? p_to   : p_from;
+    
+    // Tranco a partição de menor valor primeiro
+    /* Isso evita o caso em que uma thread tranca uma, outra tranca outra
+    e nenhuma das duas consegue finalizar sua operação */
+    pthread_rwlock_wrlock(&self->rwlocks[p1]);
+    
+    // Tranco a partição 2 APENAS SE não for a mesma que já está trancada
+    /* Isso evita o caso em que se tenta trancar uma partição que já estava trancada,
+    o que prenderia infinitamente o programa aqui, já que para ela ser destrancada, teria que
+    necessariamente sair daqui.
+    */
+    if (p1 != p2){
+        pthread_rwlock_wrlock(&self->rwlocks[p2]);
+    }
 }
 
 void db_release_pair(db_t *self, const char *from, const char *to)
 {
-    /* TODO: Implementar! */
+    unsigned int p_from = db_partition_of(self, from);
+    unsigned int p_to   = db_partition_of(self, to);
+
+    unsigned int p1 = (p_from < p_to) ? p_from: p_to;
+    unsigned int p2 = (p_from < p_to) ? p_to  : p_from;
+    
+    // Destranco a partição de menor valor primeiro
+    /* É necessário manter essa lógica pois pode ser que a partition_2 não esteja trancada,
+    e é impossível destrancar algo que não estava trancado */
+    pthread_rwlock_unlock(&self->rwlocks[p1]);
+    
+    if (p1 != p2){
+        pthread_rwlock_unlock(&self->rwlocks[p2]);
+    }
 }
+
+/*
+================================================================
+                        Parte 3                 
+================================================================
+*/
 
 void db_snapshot_begin(db_t *self)
 {
@@ -64,6 +132,10 @@ void db_snapshot_end(db_t *self)
 {
     /* TODO: Implementar! */
 }
+
+/*
+================================================================
+*/
 
 /* --------------------------------------------------------- */
 /* ATENÇÃO: Não será necessário modificar as funções abaixo! */

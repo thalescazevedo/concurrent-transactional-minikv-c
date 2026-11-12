@@ -23,6 +23,9 @@
         /* TODO: Adicione aqui os atributos que achar necessários para implementar o
         comportamento do banco. Esses atributos deverão ser usados pelas funções
         do banco. */
+
+        pthread_rwlock_t *rwlocks;
+
     } db_t;
 
     /*============================================================================*
