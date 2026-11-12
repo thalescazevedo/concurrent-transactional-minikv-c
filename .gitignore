@@ -1,0 +1,18 @@
+# Compilação e objetos
+obj/
+*.o
+*.gch
+
+# Binário principal
+program
+
+# Arquivo de log de tempo de execução
+wal.log
+
+# Arquivo de submissão do trabalho
+solution.tar.gz
+
+# Arquivos de backup gerados pelo OneDrive / editores
+*safeBackup*
+*~
+*.swp
