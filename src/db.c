@@ -29,11 +29,16 @@ void db_init(db_t *self, wal_t *wal)
 
     /* TODO: Adicionar código aqui se necessário! */
 
+    /* Part 1 */
     self->rwlocks = malloc(config.partitions * sizeof(pthread_rwlock_t));
     
     for (unsigned int i = 0; i < config.partitions; i++) {
         pthread_rwlock_init(&self->rwlocks[i], NULL);
     }
+
+    /* Part 3*/
+
+    pthread_rwlock_init(&self->snaplock, NULL);
 
     plog("[db] Initialized\n");
 }
@@ -46,10 +51,15 @@ void db_finalize(db_t *self)
 {
     /* TODO: Adicionar código aqui se necessário! */
 
+    /* Part 1 */
     for (int i = 0; i < config.partitions; i++) {
         pthread_rwlock_destroy(&self->rwlocks[i]);
     }
     free(self->rwlocks);
+    
+    /* Part 3 */
+
+    pthread_rwlock_destroy(&self->snaplock);
 
     table_finalize(&self->table);
     plog("[db] Finalized\n");
@@ -78,6 +88,9 @@ void db_release_read(db_t *self, const char *key)
 
 void db_acquire_pair(db_t *self, const char *from, const char *to)
 {
+    /* ======= Trecho da parte 3 =======*/
+    pthread_rwlock_rdlock(&self->snaplock);
+    /* =================================*/
     unsigned int p_from = db_partition_of(self, from);
     unsigned int p_to   = db_partition_of(self, to);
 
@@ -101,6 +114,7 @@ void db_acquire_pair(db_t *self, const char *from, const char *to)
 
 void db_release_pair(db_t *self, const char *from, const char *to)
 {
+
     unsigned int p_from = db_partition_of(self, from);
     unsigned int p_to   = db_partition_of(self, to);
 
@@ -115,6 +129,10 @@ void db_release_pair(db_t *self, const char *from, const char *to)
     if (p1 != p2){
         pthread_rwlock_unlock(&self->rwlocks[p2]);
     }
+
+    /* ======= Trecho da parte 3 =======*/
+    pthread_rwlock_unlock(&self->snaplock);
+    /* =================================*/
 }
 
 /*
@@ -125,12 +143,12 @@ void db_release_pair(db_t *self, const char *from, const char *to)
 
 void db_snapshot_begin(db_t *self)
 {
-    /* TODO: Implementar! */
+    pthread_rwlock_wrlock(&self->snaplock);
 }
 
 void db_snapshot_end(db_t *self)
 {
-    /* TODO: Implementar! */
+    pthread_rwlock_unlock(&self->snaplock);
 }
 
 /*

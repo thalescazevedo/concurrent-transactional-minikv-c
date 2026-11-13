@@ -24,7 +24,8 @@
         comportamento do banco. Esses atributos deverão ser usados pelas funções
         do banco. */
 
-        pthread_rwlock_t *rwlocks;
+        pthread_rwlock_t *rwlocks;  /* Part 1 */
+        pthread_rwlock_t snaplock; /* Part 2*/
 
     } db_t;
 
